@@ -1,0 +1,8 @@
+{
+  "kind": "player",
+  "action": "walk",
+  "visual_w": 2.7,
+  "visual_h": 2.475,
+  "fps": 30,
+  "frameCount": 25
+}

@@ -1,0 +1,21 @@
+{
+  "kind": "chain",
+  "role": "ladder",
+  "group": "Terrain",
+  "tiling": "v",
+  "behavior": {
+    "climbable": true
+  },
+  "defaultSize": [
+    0.25,
+    2.2
+  ],
+  "color": {
+    "fill": "#505050",
+    "stroke": "#c0c0c0",
+    "label": "Chain",
+    "icon": "⛓"
+  },
+  "fps": 1,
+  "frameCount": 1
+}

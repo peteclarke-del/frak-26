@@ -1,0 +1,34 @@
+{
+  "kind": "diamond",
+  "role": "item",
+  "group": "Items",
+  "behavior": {
+    "collectible": "optional",
+    "scoreValue": 100
+  },
+  "editableAttrs": [
+    {
+      "type": "number",
+      "label": "Score",
+      "min": 0,
+      "max": 10000,
+      "step": 50,
+      "defaultValue": 100
+    }
+  ],
+  "defaultSize": [
+    0.8,
+    0.8
+  ],
+  "color": {
+    "fill": "#1a505a",
+    "stroke": "#60f0ff",
+    "label": "Diamond",
+    "icon": "\ud83d\udc8e"
+  },
+  "visual_w": 0.75,
+  "visual_h": 0.75,
+  "fps": 12,
+  "frameCount": 25,
+  "spriteScale": 0.9375
+}

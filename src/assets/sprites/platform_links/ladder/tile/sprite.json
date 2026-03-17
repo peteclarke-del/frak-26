@@ -1,0 +1,23 @@
+{
+  "kind": "ladder",
+  "role": "ladder",
+  "group": "Terrain",
+  "tiling": "v",
+  "behavior": {
+    "climbable": true
+  },
+  "defaultSize": [
+    1.2,
+    2.2
+  ],
+  "color": {
+    "fill": "#5a4800",
+    "stroke": "#ffd700",
+    "label": "Ladder",
+    "icon": "≡"
+  },
+  "visual_w": 1.2,
+  "visual_h": 2.2,
+  "fps": 1,
+  "frameCount": 1
+}

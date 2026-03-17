@@ -1,0 +1,17 @@
+services:
+  frak:
+    build: .
+    ports:
+      - "5173:5173"
+    volumes:
+      # Mount source for hot-reload during development
+      - ./src:/app/src
+      - ./public:/app/public
+      - ./index.html:/app/index.html
+      - ./vite.config.ts:/app/vite.config.ts
+      - ./tsconfig.json:/app/tsconfig.json
+      # Persist level/sprite editor saves
+      - ./public/levels:/app/public/levels
+      - ./public/sprites:/app/public/sprites
+    environment:
+      - NODE_ENV=development

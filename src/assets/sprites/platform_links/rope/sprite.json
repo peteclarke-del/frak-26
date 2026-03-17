@@ -1,0 +1,21 @@
+{
+  "kind": "rope",
+  "role": "ladder",
+  "group": "Terrain",
+  "tiling": "v",
+  "behavior": {
+    "climbable": true
+  },
+  "defaultSize": [
+    0.5,
+    2.2
+  ],
+  "color": {
+    "fill": "#6a5030",
+    "stroke": "#c8a060",
+    "label": "Rope",
+    "icon": "🪢"
+  },
+  "fps": 1,
+  "frameCount": 1
+}

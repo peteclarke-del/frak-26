@@ -1,0 +1,8 @@
+{
+  "kind": "player",
+  "action": "sit",
+  "visual_w": 2.7,
+  "visual_h": 2.475,
+  "fps": 8,
+  "frameCount": 25
+}

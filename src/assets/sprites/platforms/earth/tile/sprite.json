@@ -1,0 +1,23 @@
+{
+  "kind": "earth",
+  "role": "platform",
+  "group": "Terrain",
+  "tiling": "h",
+  "behavior": {
+    "solid": true
+  },
+  "defaultSize": [
+    1.0,
+    1.0
+  ],
+  "color": {
+    "fill": "#4a2e0e",
+    "stroke": "#c0862a",
+    "label": "Earth",
+    "icon": "🟫"
+  },
+  "visual_w": 1.5,
+  "visual_h": 1.0,
+  "fps": 1,
+  "frameCount": 1
+}

@@ -1,0 +1,41 @@
+{
+  "kind": "key",
+  "role": "item",
+  "group": "Items",
+  "behavior": {
+    "collectible": "mandatory",
+    "scoreValue": 250,
+    "hud": true,
+    "hudLabel": "Keys"
+  },
+  "editableAttrs": [
+    {
+      "type": "number",
+      "label": "Score",
+      "min": 0,
+      "max": 10000,
+      "step": 50,
+      "defaultValue": 250
+    },
+    {
+      "type": "boolean",
+      "label": "Show in HUD",
+      "defaultValue": true
+    }
+  ],
+  "defaultSize": [
+    0.25,
+    1
+  ],
+  "color": {
+    "fill": "#202870",
+    "stroke": "#b0b0ff",
+    "label": "Key",
+    "icon": "\ud83d\udddd"
+  },
+  "visual_w": 0.8,
+  "visual_h": 0.8438,
+  "fps": 12,
+  "frameCount": 25,
+  "spriteScale": 0.9375
+}

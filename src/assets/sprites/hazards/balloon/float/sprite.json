@@ -1,0 +1,67 @@
+{
+  "kind": "balloon",
+  "role": "hazard",
+  "group": "Hazards",
+  "behavior": {
+    "hazard": true,
+    "hazardMovement": "rise",
+    "hazardAnimated": true,
+    "hazardAnimFps": 3.5
+  },
+  "editableAttrs": [
+    {
+      "type": "select",
+      "label": "Direction",
+      "options": [
+        {
+          "value": "down",
+          "label": "Top \u2192 Bottom"
+        },
+        {
+          "value": "up",
+          "label": "Bottom \u2192 Top"
+        },
+        {
+          "value": "diagonal-left",
+          "label": "Diagonal \u2199"
+        },
+        {
+          "value": "diagonal-right",
+          "label": "Diagonal \u2198"
+        }
+      ],
+      "defaultValue": "down"
+    },
+    {
+      "type": "number",
+      "label": "Interval (s)",
+      "min": 0.5,
+      "max": 30,
+      "step": 0.5,
+      "defaultValue": 3
+    },
+    {
+      "type": "number",
+      "label": "Speed",
+      "min": 0.1,
+      "max": 5,
+      "step": 0.1,
+      "defaultValue": 1
+    }
+  ],
+  "defaultSize": [
+    0.9,
+    0.9
+  ],
+  "color": {
+    "fill": "#801040",
+    "stroke": "#ff60a0",
+    "label": "Balloon",
+    "icon": "\ud83c\udf88"
+  },
+  "visual_w": 1.5,
+  "visual_h": 1.5,
+  "fps": 10,
+  "frameCount": 2,
+  "spriteScale": 1.875
+}

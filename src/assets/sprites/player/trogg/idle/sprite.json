@@ -1,0 +1,21 @@
+{
+  "kind": "player",
+  "role": "spawn",
+  "group": "Characters",
+  "behavior": {},
+  "defaultSize": [
+    0.85,
+    1.7
+  ],
+  "color": {
+    "fill": "#102050",
+    "stroke": "#60a0ff",
+    "label": "Trogg",
+    "icon": "\ud83e\uddcd"
+  },
+  "visual_w": 2.7,
+  "visual_h": 2.475,
+  "fps": 10,
+  "frameCount": 25,
+  "spriteScale": 1.6875
+}

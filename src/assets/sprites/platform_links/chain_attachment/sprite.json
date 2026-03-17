@@ -1,0 +1,21 @@
+{
+  "kind": "chain_clamp",
+  "role": "ladder",
+  "group": "Terrain",
+  "behavior": {
+    "climbable": true,
+        "solid": true
+  },
+  "defaultSize": [
+    0.5,
+    0.5
+  ],
+  "color": {
+    "fill": "#505050",
+    "stroke": "#c0c0c0",
+    "label": "Chain Clamp",
+    "icon": "⛓"
+  },
+  "fps": 1,
+  "frameCount": 1
+}

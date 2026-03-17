@@ -1,0 +1,21 @@
+{
+  "kind": "girder",
+  "role": "platform",
+  "group": "Terrain",
+  "tiling": "h",
+  "behavior": {
+    "solid": true
+  },
+  "defaultSize": [
+    1.0,
+    1.0
+  ],
+  "color": {
+    "fill": "#606868",
+    "stroke": "#a0b0b0",
+    "label": "Girder",
+    "icon": "🔩"
+  },
+  "fps": 1,
+  "frameCount": 1
+}

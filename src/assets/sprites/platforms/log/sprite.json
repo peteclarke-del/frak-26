@@ -1,0 +1,21 @@
+{
+  "kind": "log",
+  "role": "platform",
+  "group": "Terrain",
+  "tiling": "h",
+  "behavior": {
+    "solid": true
+  },
+  "defaultSize": [
+    1.0,
+    1.0
+  ],
+  "color": {
+    "fill": "#5c3810",
+    "stroke": "#b07830",
+    "label": "Log",
+    "icon": "🪵"
+  },
+  "fps": 1,
+  "frameCount": 1
+}

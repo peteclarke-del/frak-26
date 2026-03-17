@@ -1,0 +1,8 @@
+{
+  "kind": "player",
+  "action": "wave",
+  "visual_w": 2.7,
+  "visual_h": 2.475,
+  "fps": 10,
+  "frameCount": 25
+}
