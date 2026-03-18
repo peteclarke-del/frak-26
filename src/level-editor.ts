@@ -1,9 +1,13 @@
 // ── Level Editor ──────────────────────────────────────────────────────────────
-// Self-contained 2D canvas level editor for Frak 2.5D.
+// Self-contained 2D canvas level editor.
 // Communicates with main.ts via onDryRun / onClose callbacks.
 
 import JSZip from 'jszip'
 import { allSpritePngs, spriteConfigModules as spriteConfigGlob } from './sprite-data'
+import { bgUrls, mp3Urls } from './assets'
+
+const builtinBgUrls: Record<number, string> = Object.fromEntries(bgUrls.map((u, i) => [i, u]))
+const builtinMp3Urls: Record<number, string> = Object.fromEntries(mp3Urls.map((u, i) => [i, u]))
 
 // Bundled built-in levels (assets first, then public/ overlays at runtime)
 const builtinLevelModules = import.meta.glob(
@@ -43,6 +47,12 @@ export interface LevelFile {
   worldBounds?: { left: number; right: number; bottom: number; top: number }
   /** Hazard kinds that are disabled for this level (won't auto-spawn). */
   disabledHazards?: string[]
+  /** Filename of custom background image in public/background/ (used when backgroundIndex >= 100). */
+  customBg?: string
+  /** Background colour hex string (used when backgroundIndex === -1). Defaults to #00d8d8. */
+  bgColor?: string
+  /** Filename of custom music file in public/music/ (used when musicTrack >= 100). */
+  customMusic?: string
 }
 
 /** A single entry in the level's spriteMap — tells the engine everything about
@@ -543,6 +553,15 @@ export class LevelEditor {
   private timeLimitInput!: HTMLInputElement
   private musicSelect!: HTMLSelectElement
   private bgSelect!: HTMLSelectElement
+  private musicDeleteBtn!: HTMLButtonElement
+  private bgDeleteBtn!: HTMLButtonElement
+  private bgColorInput!: HTMLInputElement
+  private bgColorRow!: HTMLDivElement
+  private bgThumb!: HTMLImageElement
+  private musicPreviewBtn!: HTMLButtonElement
+  private previewAudio: HTMLAudioElement | null = null
+  private customBgFiles: string[] = []
+  private customMusicFiles: string[] = []
   private levelSelectEl!: HTMLSelectElement
   private statusPos!: HTMLSpanElement
   private statusCount!: HTMLSpanElement
@@ -886,21 +905,27 @@ export class LevelEditor {
       </div>
       <div class="ed-section">
         <div class="ed-section-head">Music</div>
-        <select id="ed-music" class="ed-prop">
-          <option value="1">Level 1</option>
-          <option value="2">Level 2</option>
-          <option value="3">Level 3</option>
-          <option value="0">Title</option>
-        </select>
+        <div style="display:flex;gap:4px;align-items:center">
+          <select id="ed-music" class="ed-prop" style="flex:1"></select>
+          <button class="ed-btn" id="ed-music-preview" style="font-size:14px;width:28px;height:28px;padding:0;line-height:28px;text-align:center;flex-shrink:0" title="Preview music">▶</button>
+        </div>
+        <div style="display:flex;gap:4px;margin-top:4px">
+          <button class="ed-btn" id="ed-music-upload" style="flex:1;font-size:11px" title="Upload custom music file">⊕ Upload</button>
+          <button class="ed-btn ed-danger" id="ed-music-delete" style="font-size:11px;display:none" title="Delete selected custom music">✕ Delete</button>
+        </div>
       </div>
       <div class="ed-section">
         <div class="ed-section-head">Background</div>
-        <select id="ed-bg" class="ed-prop">
-          <option value="0">Level 1</option>
-          <option value="1">Level 2</option>
-          <option value="2">Level 3</option>
-          <option value="-1">None (teal)</option>
-        </select>
+        <select id="ed-bg" class="ed-prop"></select>
+        <div id="ed-bg-color-row" style="display:none;margin-top:4px;align-items:center;gap:6px">
+          <label style="font-size:11px;color:#a0c0e0">Colour</label>
+          <input id="ed-bg-color" type="color" value="#00d8d8" style="width:36px;height:24px;padding:0;border:1px solid #3a6090;border-radius:3px;background:transparent;cursor:pointer" />
+        </div>
+        <img id="ed-bg-thumb" style="display:none;margin-top:6px;max-width:100%;height:auto;border:1px solid #3a6090;border-radius:3px" alt="Background preview" />
+        <div style="display:flex;gap:4px;margin-top:4px">
+          <button class="ed-btn" id="ed-bg-upload" style="flex:1;font-size:11px" title="Upload custom background image">⊕ Upload</button>
+          <button class="ed-btn ed-danger" id="ed-bg-delete" style="font-size:11px;display:none" title="Delete selected custom background">✕ Delete</button>
+        </div>
       </div>
       <div class="ed-section">
         <div class="ed-section-head">Hazards</div>
@@ -1058,6 +1083,12 @@ export class LevelEditor {
     this.timeLimitInput = document.getElementById('ed-timelimit') as HTMLInputElement
     this.musicSelect  = document.getElementById('ed-music')     as HTMLSelectElement
     this.bgSelect     = document.getElementById('ed-bg')        as HTMLSelectElement
+    this.musicDeleteBtn = document.getElementById('ed-music-delete') as HTMLButtonElement
+    this.bgDeleteBtn    = document.getElementById('ed-bg-delete')    as HTMLButtonElement
+    this.bgColorInput   = document.getElementById('ed-bg-color')     as HTMLInputElement
+    this.bgColorRow     = document.getElementById('ed-bg-color-row') as HTMLDivElement
+    this.bgThumb        = document.getElementById('ed-bg-thumb')     as HTMLImageElement
+    this.musicPreviewBtn = document.getElementById('ed-music-preview') as HTMLButtonElement
     this.levelSelectEl= document.getElementById('ed-level-sel') as HTMLSelectElement
     this.statusPos    = document.getElementById('ed-status-pos')as HTMLSpanElement
     this.statusCount  = document.getElementById('ed-status-count')as HTMLSpanElement
@@ -1120,11 +1151,50 @@ export class LevelEditor {
       if (this.level) { this.level.name = this.nameInput.value; this.saveCurrentCustom() }
     })
     this.musicSelect.addEventListener('change', () => {
-      if (this.level) { this.level.musicTrack = parseInt(this.musicSelect.value); this.saveCurrentCustom() }
+      if (this.level) {
+        const val = parseInt(this.musicSelect.value)
+        this.level.musicTrack = val
+        // Store custom filename when a custom music track is selected
+        if (val >= 100) {
+          const idx = val - 100
+          this.level.customMusic = this.customMusicFiles[idx]
+        } else {
+          delete this.level.customMusic
+        }
+        this.updateMusicDeleteBtn()
+        this.stopMusicPreview()
+        this.saveCurrentCustom()
+      }
     })
     this.bgSelect.addEventListener('change', () => {
-      if (this.level) { this.level.backgroundIndex = parseInt(this.bgSelect.value); this.saveCurrentCustom() }
+      if (this.level) {
+        const val = parseInt(this.bgSelect.value)
+        this.level.backgroundIndex = val
+        if (val >= 100) {
+          const idx = val - 100
+          this.level.customBg = this.customBgFiles[idx]
+        } else {
+          delete this.level.customBg
+        }
+        this.updateBgDeleteBtn()
+        this.updateBgColorPicker()
+        this.updateBgThumbnail()
+        this.saveCurrentCustom()
+      }
     })
+    this.musicPreviewBtn.addEventListener('click', () => this.toggleMusicPreview())
+    this.bgColorInput.addEventListener('input', () => {
+      if (this.level && this.level.backgroundIndex === -1) {
+        this.level.bgColor = this.bgColorInput.value
+        this.saveCurrentCustom()
+      }
+    })
+
+    // Custom asset upload/delete buttons
+    document.getElementById('ed-music-upload')!.addEventListener('click', () => this.uploadCustomAsset('music'))
+    this.musicDeleteBtn.addEventListener('click', () => this.deleteCustomAsset('music'))
+    document.getElementById('ed-bg-upload')!.addEventListener('click', () => this.uploadCustomAsset('background'))
+    this.bgDeleteBtn.addEventListener('click', () => this.deleteCustomAsset('background'))
     this.timeLimitInput.addEventListener('change', () => {
       if (this.level) {
         const v = parseInt(this.timeLimitInput.value)
@@ -1419,8 +1489,24 @@ export class LevelEditor {
     this.selectedSet.clear()
     this.nameInput.value = lf.name
     this.timeLimitInput.value = String(lf.timeLimit ?? 120)
+
+    // Resolve custom bg/music by filename (index may shift if files were added/removed)
+    if (lf.customBg) {
+      const idx = this.customBgFiles.indexOf(lf.customBg)
+      if (idx >= 0) { lf.backgroundIndex = 100 + idx; this.level.backgroundIndex = 100 + idx }
+    }
+    if (lf.customMusic) {
+      const idx = this.customMusicFiles.indexOf(lf.customMusic)
+      if (idx >= 0) { lf.musicTrack = 100 + idx; this.level.musicTrack = 100 + idx }
+    }
+
     this.musicSelect.value = String(lf.musicTrack)
     this.bgSelect.value = String(lf.backgroundIndex)
+    this.updateMusicDeleteBtn()
+    this.updateBgDeleteBtn()
+    this.updateBgColorPicker()
+    this.updateBgThumbnail()
+    this.stopMusicPreview()
     this.levelSelectEl.value = lf.id
     this.undoStack = []
     this.zoomToGame()
@@ -1492,6 +1578,227 @@ export class LevelEditor {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(saved, null, 2),
     }).catch(() => { /* save failed — dev server may not support it */ })
+  }
+
+  // ── Custom background/music asset management ──────────────────────────────
+
+  async refreshCustomAssetLists() {
+    try {
+      const [bgResp, musicResp] = await Promise.all([
+        fetch('/__asset_list/background'),
+        fetch('/__asset_list/music'),
+      ])
+      this.customBgFiles = bgResp.ok ? await bgResp.json() : []
+      this.customMusicFiles = musicResp.ok ? await musicResp.json() : []
+    } catch {
+      this.customBgFiles = []
+      this.customMusicFiles = []
+    }
+    this.rebuildBgSelect()
+    this.rebuildMusicSelect()
+  }
+
+  private rebuildBgSelect() {
+    const sel = this.bgSelect
+    const prev = sel.value
+    sel.innerHTML = ''
+    // Built-in options
+    const builtinOpts = [
+      { value: '0', label: 'Level 1' },
+      { value: '1', label: 'Level 2' },
+      { value: '2', label: 'Level 3' },
+      { value: '-1', label: 'None (colour)' },
+    ]
+    for (const o of builtinOpts) {
+      const opt = document.createElement('option')
+      opt.value = o.value; opt.textContent = o.label
+      sel.appendChild(opt)
+    }
+    // Custom backgrounds
+    if (this.customBgFiles.length > 0) {
+      const grp = document.createElement('optgroup')
+      grp.label = 'Custom'
+      this.customBgFiles.forEach((f, i) => {
+        const opt = document.createElement('option')
+        opt.value = String(100 + i); opt.textContent = f
+        grp.appendChild(opt)
+      })
+      sel.appendChild(grp)
+    }
+    sel.value = prev
+    this.updateBgDeleteBtn()
+  }
+
+  private rebuildMusicSelect() {
+    const sel = this.musicSelect
+    const prev = sel.value
+    sel.innerHTML = ''
+    const builtinOpts = [
+      { value: '1', label: 'Level 1' },
+      { value: '2', label: 'Level 2' },
+      { value: '3', label: 'Level 3' },
+      { value: '0', label: 'Title' },
+    ]
+    for (const o of builtinOpts) {
+      const opt = document.createElement('option')
+      opt.value = o.value; opt.textContent = o.label
+      sel.appendChild(opt)
+    }
+    if (this.customMusicFiles.length > 0) {
+      const grp = document.createElement('optgroup')
+      grp.label = 'Custom'
+      this.customMusicFiles.forEach((f, i) => {
+        const opt = document.createElement('option')
+        opt.value = String(100 + i); opt.textContent = f
+        grp.appendChild(opt)
+      })
+      sel.appendChild(grp)
+    }
+    sel.value = prev
+    this.updateMusicDeleteBtn()
+  }
+
+  private updateBgDeleteBtn() {
+    const val = parseInt(this.bgSelect.value)
+    this.bgDeleteBtn.style.display = val >= 100 ? '' : 'none'
+  }
+
+  private updateBgColorPicker() {
+    const isNone = parseInt(this.bgSelect.value) === -1
+    this.bgColorRow.style.display = isNone ? 'flex' : 'none'
+    if (isNone && this.level) {
+      this.bgColorInput.value = this.level.bgColor ?? '#00d8d8'
+    }
+  }
+
+  private updateMusicDeleteBtn() {
+    const val = parseInt(this.musicSelect.value)
+    this.musicDeleteBtn.style.display = val >= 100 ? '' : 'none'
+  }
+
+  private updateBgThumbnail() {
+    const val = parseInt(this.bgSelect.value)
+    if (val >= 0 && val < 100 && builtinBgUrls[val]) {
+      this.bgThumb.src = builtinBgUrls[val]
+      this.bgThumb.style.display = ''
+    } else if (val >= 100) {
+      const idx = val - 100
+      const filename = this.customBgFiles[idx]
+      if (filename) {
+        this.bgThumb.src = `/background/${filename}`
+        this.bgThumb.style.display = ''
+      } else {
+        this.bgThumb.style.display = 'none'
+      }
+    } else {
+      this.bgThumb.style.display = 'none'
+    }
+  }
+
+  private toggleMusicPreview() {
+    if (this.previewAudio) {
+      this.stopMusicPreview()
+      return
+    }
+    const val = parseInt(this.musicSelect.value)
+    let url: string | null = null
+    if (val >= 0 && val < 100 && builtinMp3Urls[val] !== undefined) {
+      url = builtinMp3Urls[val]
+    } else if (val >= 100) {
+      const idx = val - 100
+      const filename = this.customMusicFiles[idx]
+      if (filename) url = `/music/${filename}`
+    }
+    if (!url) return
+    const a = new Audio(url)
+    a.loop = true
+    a.volume = 0.5
+    a.play().catch(() => { /* user gesture required */ })
+    this.previewAudio = a
+    this.musicPreviewBtn.textContent = '⏹'
+    this.musicPreviewBtn.title = 'Stop preview'
+  }
+
+  private stopMusicPreview() {
+    if (this.previewAudio) {
+      this.previewAudio.pause()
+      this.previewAudio.src = ''
+      this.previewAudio = null
+    }
+    this.musicPreviewBtn.textContent = '▶'
+    this.musicPreviewBtn.title = 'Preview music'
+  }
+
+  private uploadCustomAsset(type: 'background' | 'music') {
+    const accept = type === 'background' ? 'image/png,image/jpeg,image/webp' : 'audio/mpeg,audio/ogg,.vgz'
+    const input = document.createElement('input')
+    input.type = 'file'; input.accept = accept
+    input.addEventListener('change', async () => {
+      const file = input.files?.[0]
+      if (!file) return
+      // Sanitize filename: keep alphanumeric, dash, underscore, dot
+      const safeName = file.name.replace(/[^a-zA-Z0-9_.-]/g, '_')
+      try {
+        const resp = await fetch(`/__asset_save/${type}/${safeName}`, {
+          method: 'POST',
+          body: file,
+        })
+        if (!resp.ok) { alert(`Upload failed: ${await resp.text()}`); return }
+        await this.refreshCustomAssetLists()
+        // Auto-select the newly uploaded item
+        const list = type === 'background' ? this.customBgFiles : this.customMusicFiles
+        const idx = list.indexOf(safeName)
+        if (idx >= 0 && this.level) {
+          const val = 100 + idx
+          if (type === 'background') {
+            this.bgSelect.value = String(val)
+            this.level.backgroundIndex = val
+            this.level.customBg = safeName
+            this.updateBgDeleteBtn()
+            this.updateBgThumbnail()
+          } else {
+            this.musicSelect.value = String(val)
+            this.level.musicTrack = val
+            this.level.customMusic = safeName
+            this.updateMusicDeleteBtn()
+            this.stopMusicPreview()
+          }
+          this.saveCurrentCustom()
+        }
+      } catch (e) { alert(`Upload error: ${e}`) }
+    })
+    input.click()
+  }
+
+  private async deleteCustomAsset(type: 'background' | 'music') {
+    const sel = type === 'background' ? this.bgSelect : this.musicSelect
+    const val = parseInt(sel.value)
+    if (val < 100) return
+    const idx = val - 100
+    const list = type === 'background' ? this.customBgFiles : this.customMusicFiles
+    const filename = list[idx]
+    if (!filename || !confirm(`Delete custom ${type} "${filename}"?`)) return
+    try {
+      await fetch(`/__asset_delete/${type}/${filename}`, { method: 'DELETE' })
+    } catch { /* ignore */ }
+    await this.refreshCustomAssetLists()
+    // Reset to default
+    if (this.level) {
+      if (type === 'background') {
+        this.level.backgroundIndex = 0
+        delete this.level.customBg
+        this.bgSelect.value = '0'
+        this.updateBgDeleteBtn()
+        this.updateBgThumbnail()
+      } else {
+        this.level.musicTrack = 1
+        delete this.level.customMusic
+        this.musicSelect.value = '1'
+        this.updateMusicDeleteBtn()
+        this.stopMusicPreview()
+      }
+      this.saveCurrentCustom()
+    }
   }
 
   private commitEdit() {
@@ -2505,6 +2812,7 @@ export class LevelEditor {
   show() {
     this.el.style.display = 'flex'
     this.setMode('select')
+    this.refreshCustomAssetLists()
     setTimeout(() => {
       this.onResize()
       this.refreshLevelPicker().then(() => {
@@ -2514,6 +2822,7 @@ export class LevelEditor {
   }
 
   hide() {
+    this.stopMusicPreview()
     this.el.style.display = 'none'
   }
 

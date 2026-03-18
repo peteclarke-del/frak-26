@@ -1,23 +1,6 @@
 import * as THREE from 'three'
 import './style.css'
-import yoyoSpriteUrl from './assets/sprites/weapons/yoyo/yoyo.png'
-import frakBubbleUrl from './assets/sprites/frak.png'
-const titleBgUrls = Object.values(
-  import.meta.glob('./assets/title/*.png', { query: '?url', import: 'default', eager: true }) as Record<string, string>
-)
-import level1BgUrl from './assets/background/level1_background.png'
-import level2BgUrl from './assets/background/level2_background.png'
-import level3BgUrl from './assets/background/level3_background.png'
-import level0MusicUrl from './assets/music/Frak-level0.vgz?url'
-import level1MusicUrl from './assets/music/Frak-level1.vgz?url'
-import level2MusicUrl from './assets/music/Frak-level2.vgz?url'
-import level3MusicUrl from './assets/music/Frak-level3.vgz?url'
-import level0Mp3Url from './assets/music/Frak-level0.mp3?url'
-import level1Mp3Url from './assets/music/Frak-level1.mp3?url'
-import level2Mp3Url from './assets/music/Frak-level2.mp3?url'
-import level3Mp3Url from './assets/music/Frak-level3.mp3?url'
-import sfxLifeLostOeUrl from './assets/sfx/lifelost.mp3?url'
-import sfxLifeLostRemasterUrl from './assets/sfx/lifelost-remaster.mp3?url'
+import { bgUrls, vgzUrls, mp3Urls, sfxUrls, titleBgUrls, spriteUrls } from './assets'
 import { VgmPlayer } from './vgm-player'
 import { LevelEditor, SPRITE_METADATA, DEFAULT_SPRITE_MAP, DEFAULT_SIZE } from './level-editor'
 import type { LevelFile, SpriteMapEntry, AnimMode } from './level-editor'
@@ -181,9 +164,7 @@ const storedMusicStyle = localStorage.getItem('frak_music_style')
 let musicStyle: 'original' | 'new' =
   storedMusicStyle === 'original' || storedMusicStyle === 'new' ? storedMusicStyle : 'original'
 
-// Index 0 = title screen, 1-3 = levels 1-3
-const vgzUrls = [level0MusicUrl, level1MusicUrl, level2MusicUrl, level3MusicUrl]
-const mp3Urls  = [level0Mp3Url,  level1Mp3Url,  level2Mp3Url,  level3Mp3Url]
+// vgzUrls, mp3Urls imported from ./assets (index 0 = title, 1-3 = levels)
 
 /** Format seconds as mm:ss for timer display. */
 const formatTime = (seconds: number): string => {
@@ -324,7 +305,7 @@ app.innerHTML = `
       <div class="help-body">
         <section class="help-section">
           <h3>🎯 Objective</h3>
-          <p>Collect all the <strong>keys</strong> 🔑 in each level to advance. Avoid enemies and hazards! You have <strong>3 lives</strong> and a <strong>2-minute timer</strong> per level.</p>
+          <p>Collect all the <strong>keys</strong> 🔑 in each level to advance. Avoid enemies and hazards! You have <strong>3 lives</strong> and a <strong>tight time limit</strong> per level.</p>
         </section>
         <section class="help-section">
           <h3>🕹️ Controls</h3>
@@ -633,7 +614,10 @@ interface GameLevel {
   customWorldBounds?: { left: number; right: number; bottom: number; top: number }
   disabledHazards?: string[]
   customElements?: { kind: string; x: number; y: number; w: number; h: number; attrs?: Record<string, unknown> }[]
-  monsterKinds: string[]     // parallel to data.monsters — the spriteMap kind for each monster
+  monsterKinds: string[]
+  customBg?: string
+  customMusic?: string
+  bgColor?: string
 }
 let dryRunOverride: GameLevel | null = null
 
@@ -792,6 +776,9 @@ const levelFileToGameLevel = (lf: LevelFile): GameLevel => {
     disabledHazards: lf.disabledHazards,
     customElements: lf.customElements,
     monsterKinds,
+    customBg: lf.customBg,
+    customMusic: lf.customMusic,
+    bgColor: lf.bgColor,
   }
 }
 
@@ -1097,6 +1084,7 @@ const troggFps = (state: PlayerVisualState): number =>
 
 const troggPlayerFrames: Partial<Record<PlayerVisualState, THREE.MeshBasicMaterial[]>> = {}
 const bgMeshes: Array<THREE.Mesh | null> = [null, null, null]
+let customBgMesh: THREE.Mesh | null = null
 
 // ── Sprite frame registry ────────────────────────────────────────────────────
 // Keyed by sprite path (e.g. "enemies/scrubbly/idle"). Populated at startup from
@@ -1375,7 +1363,7 @@ const loadSpriteFrames = (name: string, anim: string): Promise<THREE.MeshBasicMa
 })()
 
 // Yoyo — single sprite from extracted frame
-imageLoader.load(yoyoSpriteUrl, (img) => {
+imageLoader.load(spriteUrls['yoyo'], (img) => {
   const c = document.createElement('canvas')
   c.width = img.width
   c.height = img.height
@@ -1389,7 +1377,7 @@ imageLoader.load(yoyoSpriteUrl, (img) => {
 })
 
 // Speech bubble texture
-imageLoader.load(frakBubbleUrl, (img) => {
+imageLoader.load(spriteUrls['frak'], (img) => {
   const c = document.createElement('canvas')
   c.width = img.width
   c.height = img.height
@@ -1432,9 +1420,7 @@ const makeBgMesh = (img: HTMLImageElement, levelIdx: number) => {
   }
 }
 
-imageLoader.load(level1BgUrl, (img) => makeBgMesh(img, 0))
-imageLoader.load(level2BgUrl, (img) => makeBgMesh(img, 1))
-imageLoader.load(level3BgUrl, (img) => makeBgMesh(img, 2))
+bgUrls.forEach((url, i) => imageLoader.load(url, (img) => makeBgMesh(img, i)))
 
 let score = 0
 let lives = 3
@@ -1733,9 +1719,16 @@ const resumeMusic = () => {
     playTitleMusic()
     return
   }
-  // In-game: play the correct level track
-  const levelIdx = Math.min(levelIndex + 1, vgzUrls.length - 1)
-  playTrack(levelIdx)
+  // In-game: play the correct level track (dry-run uses its own musicTrack)
+  const gl = dryRunOverride ?? levelCycle[levelIndex]
+  if (gl && gl.musicTrack >= 100 && gl.customMusic) {
+    mp3Player.play(`/music/${gl.customMusic}`)
+    return
+  }
+  const musicIdx = dryRunOverride
+    ? Math.min(dryRunOverride.musicTrack, vgzUrls.length - 1)
+    : Math.min(levelIndex + 1, vgzUrls.length - 1)
+  playTrack(musicIdx)
 }
 
 const setMusicEnabled = (on: boolean) => {
@@ -1911,22 +1904,57 @@ async function loadLevel(index: number) {
   // Async sprite-sheet loaders also call loadLevel to refresh visuals — we must not let them
   // start level music while the title screen is still showing.
   if (!overlayShowing) {
-    const musicIdx = Math.min(gl.musicTrack, vgzUrls.length - 1)
     stopAllMusic()
     if (musicEnabled) {
-      playTrack(musicIdx)
+      if (gl.musicTrack >= 100 && gl.customMusic) {
+        // Custom music file from public/music/
+        mp3Player.play(`/music/${gl.customMusic}`)
+      } else {
+        const musicIdx = Math.min(gl.musicTrack, vgzUrls.length - 1)
+        playTrack(musicIdx)
+      }
     }
   }
 
   // Background: swap in per-level image plane, fall back to teal
   bgMeshes.forEach((m) => { if (m) world.remove(m) })
+  // Remove any previous custom background mesh
+  if (customBgMesh) { world.remove(customBgMesh); customBgMesh = null }
   const bgIndex = gl.bgIndex
-  const bg = bgIndex >= 0 ? bgMeshes[bgIndex] : null
-  if (bg) {
+  if (bgIndex >= 100 && gl.customBg) {
+    // Load custom background from public/background/
     scene.background = null
-    world.add(bg)
+    const customBgUrl = `/background/${gl.customBg}`
+    imageLoader.load(customBgUrl, (img) => {
+      const bgW = worldBounds.right - worldBounds.left
+      const bgH = worldBounds.top - worldBounds.bottom
+      const c = document.createElement('canvas')
+      c.width = img.width; c.height = img.height
+      const ctx = c.getContext('2d')!
+      ctx.drawImage(img, 0, 0)
+      const tex = new THREE.CanvasTexture(c)
+      tex.minFilter = THREE.LinearFilter; tex.magFilter = THREE.LinearFilter
+      const mesh = new THREE.Mesh(
+        new THREE.PlaneGeometry(bgW, bgH),
+        new THREE.MeshBasicMaterial({ map: tex, depthTest: false, depthWrite: false }),
+      )
+      mesh.position.set(
+        (worldBounds.left + worldBounds.right) / 2,
+        (worldBounds.bottom + worldBounds.top) / 2, -1,
+      )
+      mesh.renderOrder = 0
+      if (customBgMesh) world.remove(customBgMesh)
+      customBgMesh = mesh
+      world.add(mesh)
+    })
   } else {
-    scene.background = new THREE.Color('#00d8d8')
+    const bg = bgIndex >= 0 ? bgMeshes[bgIndex] : null
+    if (bg) {
+      scene.background = null
+      world.add(bg)
+    } else {
+      scene.background = new THREE.Color(gl.bgColor ?? '#00d8d8')
+    }
   }
 
   const data = gl.data
@@ -1942,10 +1970,12 @@ async function loadLevel(index: number) {
   // Resize and reposition background mesh to fit computed world bounds
   const bgW = worldBounds.right - worldBounds.left
   const bgH = worldBounds.top - worldBounds.bottom
-  if (bg) {
-    bg.geometry.dispose()
-    bg.geometry = new THREE.PlaneGeometry(bgW, bgH)
-    bg.position.set(
+  // Find whichever bg mesh is currently active (built-in or custom)
+  const activeBg = customBgMesh ?? (bgIndex >= 0 && bgIndex < bgMeshes.length ? bgMeshes[bgIndex] : null)
+  if (activeBg) {
+    activeBg.geometry.dispose()
+    activeBg.geometry = new THREE.PlaneGeometry(bgW, bgH)
+    activeBg.position.set(
       (worldBounds.left + worldBounds.right) / 2,
       (worldBounds.bottom + worldBounds.top) / 2,
       -1,
@@ -2458,9 +2488,9 @@ const killPlayer = (deathMsg = 'FRAK!') => {
     stopAllMusic()
     let gameOverSfx: HTMLAudioElement | null = null
     if (musicStyle === 'new') {
-      gameOverSfx = playSfx(sfxLifeLostRemasterUrl)  // full remaster
+      gameOverSfx = playSfx(sfxUrls['lifelost-remaster'])  // full remaster
     } else {
-      gameOverSfx = playSfx(sfxLifeLostOeUrl)        // full OE
+      gameOverSfx = playSfx(sfxUrls['lifelost'])        // full OE
     }
     lives = 3
     score = 0
@@ -2499,10 +2529,10 @@ const killPlayer = (deathMsg = 'FRAK!') => {
     // Lost a life but still have lives remaining – stop BGM, play sting, then resume BGM
     stopAllMusic()
     if (musicStyle === 'new') {
-      playSfx(sfxLifeLostRemasterUrl, 2.5)  // first 2.5s of remaster
+      playSfx(sfxUrls['lifelost-remaster'], 2.5)  // first 2.5s of remaster
       setTimeout(() => resumeMusic(), 2600)
     } else {
-      const sfx = playSfx(sfxLifeLostOeUrl)              // full OE (it's short)
+      const sfx = playSfx(sfxUrls['lifelost'])              // full OE (it's short)
       sfx.addEventListener('ended', () => resumeMusic())
     }
   }
@@ -2614,11 +2644,17 @@ const stepPhysics = (dt: number) => {
   if (inputState.jumpPressed) jumpBufferTimer = movementConfig.jumpBufferTime
   else jumpBufferTimer = Math.max(0, jumpBufferTimer - dt)
 
-  if ((moveY !== 0 || inputState.up) && ladderNow) player.climbing = true
+  if ((moveY !== 0 || inputState.up) && ladderNow) {
+    // When grounded and pressing down with a ladder below, don't attach to
+    // the current (above) ladder — let the snap-down block handle it instead.
+    if (!(inputState.down && player.grounded && isLadderBelow())) {
+      player.climbing = true
+    }
+  }
   // Climbing down: only enter climbing if already airborne on a ladder
   // (grounded climb-down is handled by the isLadderBelow() block below)
   if (inputState.down && ladderNow && !player.grounded) player.climbing = true
-  if (inputState.down && !ladderNow && player.grounded && isLadderBelow()) {
+  if (inputState.down && player.grounded && isLadderBelow()) {
     // Find the closest ladder below and snap to its centre so the player
     // always goes down the intended ladder, not the nearest-to-right one.
     const body2 = getPlayerRect()
@@ -3091,7 +3127,7 @@ resize()
 // Start title screen music then show overlay.
 // playTitleMusic() is attempted immediately; browsers that enforce autoplay
 // policy will silently refuse it, so we also re-fire on the first interaction.
-vgmPlayer.preload([level0MusicUrl]).catch((e) => console.warn('[music preload level0]', e))
+vgmPlayer.preload([vgzUrls[0]]).catch((e) => console.warn('[music preload level0]', e))
 playTitleMusic()
 // Re-fire title music on first user interaction (browsers block autoplay until then).
 const playOnFirstInteraction = () => {

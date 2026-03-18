@@ -1,6 +1,6 @@
 import { defineConfig } from 'vite'
-import { writeFile, mkdir, readdir, readFile, stat } from 'fs/promises'
-import { join, relative, normalize } from 'path'
+import { writeFile, mkdir, readdir, readFile, stat, unlink } from 'fs/promises'
+import { join, relative, normalize, extname } from 'path'
 
 // Dev-only plugin: saves level JSON files to public/levels/ via POST requests
 // and maintains an index.json manifest for level discovery.
@@ -147,7 +147,94 @@ function saveSpritePlugin() {
   }
 }
 
+// Dev-only plugin: saves/lists/deletes custom background images and music files
+// in public/background/ and public/music/ (mirroring src/assets/ structure).
+function saveAssetPlugin() {
+  const publicDir = join(process.cwd(), 'public')
+
+  // Allowed asset folders and their accepted extensions
+  const ASSET_TYPES: Record<string, { dir: string; exts: string[] }> = {
+    background: { dir: join(publicDir, 'background'), exts: ['.png', '.jpg', '.jpeg', '.webp'] },
+    music:      { dir: join(publicDir, 'music'),      exts: ['.mp3', '.ogg', '.vgz'] },
+  }
+
+  return {
+    name: 'save-asset',
+    configureServer(server: { middlewares: { use: Function } }) {
+      server.middlewares.use(async (req: any, res: any, next: Function) => {
+        // List files: GET /__asset_list/<type>
+        const listMatch = req.url?.match(/^\/__asset_list\/(background|music)$/)
+        if (listMatch && req.method === 'GET') {
+          const cfg = ASSET_TYPES[listMatch[1]]
+          try {
+            await mkdir(cfg.dir, { recursive: true })
+            const files = (await readdir(cfg.dir))
+              .filter(f => cfg.exts.includes(extname(f).toLowerCase()))
+              .sort()
+            res.setHeader('Content-Type', 'application/json')
+            res.statusCode = 200
+            res.end(JSON.stringify(files))
+          } catch {
+            res.statusCode = 200
+            res.end('[]')
+          }
+          return
+        }
+
+        // Save file: POST /__asset_save/<type>/<filename>
+        const saveMatch = req.url?.match(/^\/__asset_save\/(background|music)\/([a-zA-Z0-9_.-]+)$/)
+        if (saveMatch && req.method === 'POST') {
+          const cfg = ASSET_TYPES[saveMatch[1]]
+          const filename = saveMatch[2]
+          const ext = extname(filename).toLowerCase()
+          if (!cfg.exts.includes(ext)) {
+            res.statusCode = 400; res.end('Invalid file type'); return
+          }
+          if (filename.includes('/') || filename.includes('\\') || filename.startsWith('.')) {
+            res.statusCode = 400; res.end('Invalid filename'); return
+          }
+          const chunks: Buffer[] = []
+          for await (const chunk of req) chunks.push(chunk)
+          const body = Buffer.concat(chunks)
+          await mkdir(cfg.dir, { recursive: true })
+          await writeFile(join(cfg.dir, filename), body)
+          res.statusCode = 200; res.end('OK')
+          return
+        }
+
+        // Delete file: DELETE /__asset_delete/<type>/<filename>
+        const delMatch = req.url?.match(/^\/__asset_delete\/(background|music)\/([a-zA-Z0-9_.-]+)$/)
+        if (delMatch && req.method === 'DELETE') {
+          const cfg = ASSET_TYPES[delMatch[1]]
+          const filename = delMatch[2]
+          if (filename.includes('/') || filename.includes('\\') || filename.startsWith('.')) {
+            res.statusCode = 400; res.end('Invalid filename'); return
+          }
+          const resolved = normalize(join(cfg.dir, filename))
+          if (!resolved.startsWith(cfg.dir)) {
+            res.statusCode = 400; res.end('Invalid path'); return
+          }
+          try {
+            await unlink(resolved)
+            res.statusCode = 200; res.end('OK')
+          } catch {
+            res.statusCode = 404; res.end('Not found')
+          }
+          return
+        }
+
+        return next()
+      })
+    },
+  }
+}
+
 export default defineConfig({
-  plugins: [saveLevelPlugin(), saveSpritePlugin()],
+  plugins: [saveLevelPlugin(), saveSpritePlugin(), saveAssetPlugin()],
   assetsInclude: ['**/*.vgz'],
+  server: {
+    allowedHosts: [
+      '*'
+    ]
+  } 
 })

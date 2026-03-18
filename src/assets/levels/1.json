@@ -3,7 +3,7 @@
   "name": "Level 1",
   "musicTrack": 1,
   "backgroundIndex": 0,
-  "timeLimit": 60,
+  "timeLimit": 80,
   "spriteMap": {
     "earth": {
       "sprite": "platforms/earth/tile",
